@@ -11,6 +11,8 @@ I think these two should be done in roughly this order:
     - Current logic to only show up to w and up to h are fine, but starting bounds are needed
 - Concurrent screen drawing
     - "Buffer" and status line should be drawn simultaneously, and cursor should either also be concurrent or should be a part of drawing the buffer
+- Correct go package structure
+    - I don't think input should be in the root directory/main package, but for the time being it has simplified not exporting values and handling everything as a module. At some point this should be corrected.
 
 These are all needed but probably not in this order:
 
