@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	// "github.com/BoweFlex/data-structures/stack"
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -33,20 +32,20 @@ func main() {
 		}
 	}
 	defer quit()
-	proc := InputProcessor{
+	proc := inputProcessor{
 		screen: s,
-		cursor: CursorInfo{
-			Position:     SetCoordinates(0, 0),
-			PreferredCol: 0,
+		cursor: cursorInfo{
+			position:     setCoordinates(0, 0),
+			preferredCol: 0,
 		},
-		currentMode: NORMAL,
+		currentMode: normal,
 		command:     []rune{},
 	}
 	// For some reason even if proc.updateScreen() was called here, the starting
 	// screen was not drawn. Using PostEvent to send an immediate, and invisible,
 	// `ESC` key to the editor so screen will be drawn.
 	if err := s.PostEvent(tcell.NewEventKey(tcell.KeyEscape, ' ', tcell.ModNone)); err != nil {
-		err = fmt.Errorf("%s, why was queue full immediately", err)
+		err = fmt.Errorf("%w, why was queue full immediately", err)
 		panic(err)
 	}
 
@@ -55,7 +54,7 @@ func main() {
 		case *tcell.EventResize:
 			proc.updateScreenSize()
 		case *tcell.EventKey:
-			err := proc.Process(ev)
+			err := proc.process(ev)
 			if err != nil {
 				panic(err)
 			}

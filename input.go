@@ -1,3 +1,7 @@
+// Defines the input processor which is used for:
+// - tracking the current mode
+// - processing user input
+// - updating the screen
 package main
 
 import (
@@ -12,61 +16,61 @@ import (
 type mode int
 
 const (
-	NORMAL mode = iota
-	INSERT
-	VISUAL
-	COMMAND
+	normal mode = iota
+	insert
+	visual
+	command
 )
 
-type Position struct {
+type position struct {
 	x, y int
 }
 
-func SetCoordinates(x, y int) Position {
-	return Position{x: x, y: y}
+func setCoordinates(x, y int) position {
+	return position{x: x, y: y}
 }
 
-type CursorInfo struct {
-	Position     Position
-	PreferredCol int
+type cursorInfo struct {
+	position     position
+	preferredCol int
 }
 
-func (c *CursorInfo) clampX(min, max int) {
-	if c.Position.x < min {
-		c.Position.x = min
-	} else if c.Position.x >= max {
-		c.Position.x = max - 1
+func (c *cursorInfo) clampX(minX, maxX int) {
+	if c.position.x < minX {
+		c.position.x = minX
+	} else if c.position.x >= maxX {
+		c.position.x = maxX - 1
 	}
 }
 
-func (c *CursorInfo) clampY(min, max int) {
-	if c.Position.y < min {
-		c.Position.y = min
-	} else if c.Position.y >= max {
-		c.Position.y = max - 1
+func (c *cursorInfo) clampY(minY, maxY int) {
+	if c.position.y < minY {
+		c.position.y = minY
+	} else if c.position.y >= maxY {
+		c.position.y = maxY - 1
 	}
 }
 
-func (c *CursorInfo) getCoordinates() (int, int) {
-	return c.Position.x, c.Position.y
+func (c *cursorInfo) getCoordinates() (int, int) {
+	return c.position.x, c.position.y
 }
 
-type InputProcessor struct {
+type inputProcessor struct {
 	screen                    tcell.Screen
 	screenWidth, screenHeight int
 	buffer                    string
-	cursor                    CursorInfo
+	cursor                    cursorInfo
 	currentMode               mode
 	command                   []rune
 }
 
-func (p *InputProcessor) updateScreenSize() {
+func (p *inputProcessor) updateScreenSize() {
 	p.screen.Sync()
 	p.screenWidth, p.screenHeight = p.screen.Size()
 }
 
-func (p *InputProcessor) drawStatusLine() {
-	if COMMAND == p.currentMode {
+func (p *inputProcessor) drawStatusLine() {
+	if command == p.currentMode {
 		displayStr := []rune{':'}
 		displayStr = append(displayStr, p.command...)
 		for i := range p.screenWidth {
@@ -100,20 +104,20 @@ func (p *InputProcessor) drawStatusLine() {
 	}
 }
 
-func (p *InputProcessor) showCursor() {
+func (p *inputProcessor) showCursor() {
 	p.cursor.clampX(0, p.screenWidth)
 	p.cursor.clampY(0, p.screenHeight)
 	p.screen.ShowCursor(p.cursor.getCoordinates())
 }
 
-func (p *InputProcessor) showBuffer() {
+func (p *inputProcessor) showBuffer() {
 	p.screen.Clear()
 	for i, line := range strings.Split(p.buffer, "\n") {
 		if i >= p.screenHeight {
 			break
 		}
-		if i == p.cursor.Position.y {
-			p.cursor.Position.x = len(line)
+		if i == p.cursor.position.y {
+			p.cursor.position.x = len(line)
 		}
 		for j, char := range line {
 			if j < p.screenWidth {
@@ -123,24 +127,26 @@ func (p *InputProcessor) showBuffer() {
 	}
 }
 
-func (p *InputProcessor) updateScreen() {
+func (p *inputProcessor) updateScreen() {
 	p.showCursor()
 	p.showBuffer()
 	p.drawStatusLine()
 	p.screen.Show()
 }
 
-func (p *InputProcessor) Process(input *tcell.EventKey) (err error) {
+func (p *inputProcessor) process(input *tcell.EventKey) (err error) {
+	// This should be removed at some point but it's a good failsafe if command mode is broken for some reason
 	if input.Key() == tcell.KeyCtrlC {
 		panic(errors.New("Ctrl+C Entered"))
 	}
-	if COMMAND == p.currentMode {
+	switch p.currentMode {
+	case command:
 		err = p.processInputCommand(input)
-	} else if INSERT == p.currentMode {
+	case insert:
 		err = p.processInputInsert(input)
-	} else if VISUAL == p.currentMode {
+	case visual:
 		err = p.processInputVisual(input)
-	} else {
+	default:
 		err = p.processInputNormal(input)
 	}
 	if err != nil {
@@ -150,85 +156,85 @@ func (p *InputProcessor) Process(input *tcell.EventKey) (err error) {
 	return nil
 }
 
-func (p *InputProcessor) processInputNormal(input *tcell.EventKey) (err error) {
+func (p *inputProcessor) processInputNormal(input *tcell.EventKey) (err error) {
 	switch input.Key() {
 	case tcell.KeyEscape:
-		p.currentMode = NORMAL
+		p.currentMode = normal
 	case tcell.KeyRune:
 		break
 	case tcell.KeyLeft:
-		p.cursor.Position.x -= 1
+		p.cursor.position.x--
 	case tcell.KeyDown:
-		p.cursor.Position.y += 1
+		p.cursor.position.y++
 	case tcell.KeyUp:
-		p.cursor.Position.y -= 1
+		p.cursor.position.y--
 	case tcell.KeyRight:
-		p.cursor.Position.x += 1
+		p.cursor.position.x++
 	}
 	switch input.Rune() {
 	case 'i':
-		p.currentMode = INSERT
+		p.currentMode = insert
 	case 'v':
-		p.currentMode = VISUAL
+		p.currentMode = visual
 	case ':':
-		p.currentMode = COMMAND
+		p.currentMode = command
 	case 'h':
-		p.cursor.Position.x -= 1
+		p.cursor.position.x--
 	case 'j':
-		p.cursor.Position.y += 1
+		p.cursor.position.y++
 	case 'k':
-		p.cursor.Position.y -= 1
+		p.cursor.position.y--
 	case 'l':
-		p.cursor.Position.x += 1
+		p.cursor.position.x++
 	}
 	return nil
 }
 
-func (p *InputProcessor) backSpace() {
+func (p *inputProcessor) backSpace() {
 	if size := len(p.buffer); size > 0 {
 		p.buffer = p.buffer[:size-1]
 	}
 }
 
-func (p *InputProcessor) processInputInsert(input *tcell.EventKey) (err error) {
+func (p *inputProcessor) processInputInsert(input *tcell.EventKey) (err error) {
 	switch input.Key() {
 	case tcell.KeyEscape:
-		p.currentMode = NORMAL
+		p.currentMode = normal
 	case tcell.KeyEnter:
-		p.cursor.Position.y += 1
-		p.cursor.Position.x = 0
+		p.cursor.position.y++
+		p.cursor.position.x = 0
 		p.buffer += "\n"
 	case tcell.KeyDEL:
 		p.backSpace()
-		p.cursor.Position.x -= 1
+		p.cursor.position.x--
 	case tcell.KeyBS:
 		p.backSpace()
-		p.cursor.Position.x -= 1
+		p.cursor.position.x--
 	case tcell.KeyRune:
-		p.cursor.Position.x += 1
+		p.cursor.position.x++
 		p.buffer += string(input.Rune())
 	case tcell.KeyLeft:
-		p.cursor.Position.x -= 1
+		p.cursor.position.x--
 	case tcell.KeyDown:
-		p.cursor.Position.y += 1
+		p.cursor.position.y++
 	case tcell.KeyUp:
-		p.cursor.Position.y -= 1
+		p.cursor.position.y--
 	case tcell.KeyRight:
-		p.cursor.Position.x += 1
+		p.cursor.position.x++
 	}
 
 	return nil
 }
 
-func (p *InputProcessor) processInputVisual(input *tcell.EventKey) (err error) {
+func (p *inputProcessor) processInputVisual(input *tcell.EventKey) (err error) {
 	if input.Key() == tcell.KeyEscape {
-		p.currentMode = NORMAL
+		p.currentMode = normal
 		return nil
 	}
 	return nil
 }
 
-func (p *InputProcessor) popCommandRune() error {
+func (p *inputProcessor) popCommandRune() error {
 	if size := len(p.command); size > 0 {
 		p.command = p.command[:size-1]
 		return nil
@@ -236,28 +242,31 @@ func (p *InputProcessor) popCommandRune() error {
 	return errors.New("nothing in command buffer")
 }
 
-func (p *InputProcessor) sendCommand() {
+func (p *inputProcessor) sendCommand() {
 	if slices.Equal([]rune{'q'}, p.command) || slices.Equal([]rune("quit"), p.command) {
 		p.screen.Fini()
 		os.Exit(0)
 	}
 }
 
-func (p *InputProcessor) processInputCommand(input *tcell.EventKey) (err error) {
+func (p *inputProcessor) processInputCommand(input *tcell.EventKey) (err error) {
 	leaveCommandMode := func() error {
-		p.currentMode = NORMAL
+		p.currentMode = normal
 		p.command = []rune{}
 		return nil
 	}
-	if input.Key() == tcell.KeyEscape {
+	switch input.Key() {
+	case tcell.KeyEscape:
 		return leaveCommandMode()
-	} else if input.Key() == tcell.KeyBS || input.Key() == tcell.KeyDEL {
+	case tcell.KeyBS:
+		fallthrough
+	case tcell.KeyDEL:
 		if err := p.popCommandRune(); err != nil {
 			return leaveCommandMode()
 		}
-	} else if input.Key() == tcell.KeyEnter {
+	case tcell.KeyEnter:
 		p.sendCommand()
-	} else if input.Key() == tcell.KeyRune {
+	case tcell.KeyRune:
 		p.command = append(p.command, input.Rune())
 	}
 	return nil
