@@ -34,6 +34,7 @@ func main() {
 	defer quit()
 	proc := inputProcessor{
 		screen: s,
+		offset: setCoordinates(0, 0),
 		cursor: cursorInfo{
 			position:     setCoordinates(0, 0),
 			preferredCol: 0,

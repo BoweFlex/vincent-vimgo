@@ -35,19 +35,19 @@ type cursorInfo struct {
 	preferredCol int
 }
 
-func (c *cursorInfo) clampX(minX, maxX int) {
-	if c.position.x < minX {
-		c.position.x = minX
-	} else if c.position.x >= maxX {
-		c.position.x = maxX - 1
+func (p *position) clampX(minX, maxX int) {
+	if p.x < minX {
+		p.x = minX
+	} else if p.x >= maxX {
+		p.x = maxX - 1
 	}
 }
 
-func (c *cursorInfo) clampY(minY, maxY int) {
-	if c.position.y < minY {
-		c.position.y = minY
-	} else if c.position.y >= maxY {
-		c.position.y = maxY - 1
+func (p *position) clampY(minY, maxY int) {
+	if p.y < minY {
+		p.y = minY
+	} else if p.y >= maxY {
+		p.y = maxY - 1
 	}
 }
 
@@ -55,8 +55,17 @@ func (c *cursorInfo) getCoordinates() (int, int) {
 	return c.position.x, c.position.y
 }
 
+func (c *cursorInfo) addDelta(xDelta, yDelta int, changePreferredCol bool) {
+	c.position.x += xDelta
+	c.position.y += yDelta
+	if changePreferredCol && xDelta != 0 {
+		c.preferredCol = c.position.x
+	}
+}
+
 type inputProcessor struct {
 	screen                    tcell.Screen
+	offset                    position
 	screenWidth, screenHeight int
 	buffer                    string
 	cursor                    cursorInfo
@@ -104,31 +113,53 @@ func (p *inputProcessor) drawStatusLine() {
 	}
 }
 
-func (p *inputProcessor) showCursor() {
-	p.cursor.clampX(0, p.screenWidth)
-	p.cursor.clampY(0, p.screenHeight)
-	p.screen.ShowCursor(p.cursor.getCoordinates())
+func (p *inputProcessor) setOffset(lines []string, usableHeight int) {
+	p.offset.clampY(0, len(lines))
+	numLinesShown := len(lines) - p.offset.y
+
+	if p.cursor.position.y >= usableHeight {
+		diff := max(p.cursor.position.y-usableHeight, 1)
+		p.offset.y += diff
+		p.cursor.addDelta(0, -diff, false)
+	} else if p.cursor.position.y < p.offset.y {
+		diff := p.offset.y - max(p.cursor.position.y, 0)
+		p.offset.y -= diff
+	}
+	if numLinesShown > usableHeight {
+		p.cursor.position.clampY(p.offset.y, usableHeight)
+	} else {
+		p.cursor.position.clampY(p.offset.y, numLinesShown)
+	}
+	if p.cursor.position.x >= p.screenWidth {
+		diff := max(p.cursor.position.x-p.screenWidth, 1)
+		p.offset.x += diff
+	} else if p.cursor.position.x < p.offset.x {
+		diff := p.offset.x - max(p.cursor.position.x, 0)
+		p.offset.x -= diff
+	}
+	currLineVisibleLength := len(lines[p.cursor.position.y]) - p.offset.x + 1 // Cursor should be kept within the current bounds of the line, but allowed one in front of the text
+	p.cursor.position.x = p.cursor.preferredCol
+	p.cursor.position.clampX(p.offset.x, currLineVisibleLength)
 }
 
 func (p *inputProcessor) showBuffer() {
 	p.screen.Clear()
-	for i, line := range strings.Split(p.buffer, "\n") {
-		if i >= p.screenHeight {
-			break
-		}
-		if i == p.cursor.position.y {
-			p.cursor.position.x = len(line)
-		}
-		for j, char := range line {
-			if j < p.screenWidth {
-				p.screen.SetContent(j, i, char, nil, tcell.StyleDefault)
-			}
+	usableHeight := p.screenHeight - 2 // Accounts for the space reserved for statusline
+	lines := strings.Split(p.buffer, "\n")
+	p.setOffset(lines, usableHeight)
+
+	for i := p.offset.y; i < usableHeight && i < len(lines); i++ {
+		line := lines[i]
+		chars := []rune(line)
+		for j := p.offset.x; j < len(chars); j++ {
+			char := chars[j]
+			p.screen.SetContent(j-p.offset.x, i-p.offset.y, char, nil, tcell.StyleDefault)
 		}
 	}
+	p.screen.ShowCursor(p.cursor.getCoordinates())
 }
 
 func (p *inputProcessor) updateScreen() {
-	p.showCursor()
 	p.showBuffer()
 	p.drawStatusLine()
 	p.screen.Show()
@@ -163,13 +194,13 @@ func (p *inputProcessor) processInputNormal(input *tcell.EventKey) (err error) {
 	case tcell.KeyRune:
 		break
 	case tcell.KeyLeft:
-		p.cursor.position.x--
+		p.cursor.addDelta(-1, 0, true)
 	case tcell.KeyDown:
-		p.cursor.position.y++
+		p.cursor.addDelta(0, 1, false)
 	case tcell.KeyUp:
-		p.cursor.position.y--
+		p.cursor.addDelta(0, -1, false)
 	case tcell.KeyRight:
-		p.cursor.position.x++
+		p.cursor.addDelta(1, 0, true)
 	}
 	switch input.Rune() {
 	case 'i':
@@ -179,13 +210,13 @@ func (p *inputProcessor) processInputNormal(input *tcell.EventKey) (err error) {
 	case ':':
 		p.currentMode = command
 	case 'h':
-		p.cursor.position.x--
+		p.cursor.addDelta(-1, 0, true)
 	case 'j':
-		p.cursor.position.y++
+		p.cursor.addDelta(0, 1, false)
 	case 'k':
-		p.cursor.position.y--
+		p.cursor.addDelta(0, -1, false)
 	case 'l':
-		p.cursor.position.x++
+		p.cursor.addDelta(1, 0, true)
 	}
 	return nil
 }
@@ -207,29 +238,58 @@ func (p *inputProcessor) processInputInsert(input *tcell.EventKey) (err error) {
 	case tcell.KeyDEL:
 		p.backSpace()
 		p.cursor.position.x--
+		p.cursor.preferredCol = p.cursor.position.x
 	case tcell.KeyBS:
 		p.backSpace()
 		p.cursor.position.x--
+		p.cursor.preferredCol = p.cursor.position.x
 	case tcell.KeyRune:
 		p.cursor.position.x++
+		p.cursor.preferredCol = p.cursor.position.x
 		p.buffer += string(input.Rune())
 	case tcell.KeyLeft:
-		p.cursor.position.x--
+		p.cursor.addDelta(-1, 0, true)
 	case tcell.KeyDown:
-		p.cursor.position.y++
+		p.cursor.addDelta(0, 1, false)
 	case tcell.KeyUp:
-		p.cursor.position.y--
+		p.cursor.addDelta(0, -1, false)
 	case tcell.KeyRight:
-		p.cursor.position.x++
+		p.cursor.addDelta(1, 0, true)
 	}
 
 	return nil
 }
 
 func (p *inputProcessor) processInputVisual(input *tcell.EventKey) (err error) {
-	if input.Key() == tcell.KeyEscape {
+	switch input.Key() {
+	case tcell.KeyEscape:
 		p.currentMode = normal
-		return nil
+	case tcell.KeyRune:
+		break
+	case tcell.KeyLeft:
+		p.cursor.addDelta(-1, 0, true)
+	case tcell.KeyDown:
+		p.cursor.addDelta(0, 1, false)
+	case tcell.KeyUp:
+		p.cursor.addDelta(0, -1, false)
+	case tcell.KeyRight:
+		p.cursor.addDelta(1, 0, true)
+	}
+	switch input.Rune() {
+	case 'i':
+		p.currentMode = insert
+	case 'v':
+		p.currentMode = normal
+	case ':':
+		p.currentMode = command
+	case 'h':
+		p.cursor.addDelta(-1, 0, true)
+	case 'j':
+		p.cursor.addDelta(0, 1, false)
+	case 'k':
+		p.cursor.addDelta(0, -1, false)
+	case 'l':
+		p.cursor.addDelta(1, 0, true)
 	}
 	return nil
 }
