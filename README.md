@@ -6,9 +6,6 @@ An attempt at writing a code editor in Golang, eventually to implement Vim motio
 
 I think these two should be done in roughly this order:
 
-- Paging to create a "window" of text
-    - I'm picturing a horizontal offset and a vertical offset, and only lines above the vertical offset are shown and only columns above the horizontal offset are shown
-    - Current logic to only show up to w and up to h are fine, but starting bounds are needed
 - Concurrent screen drawing
     - "Buffer" and status line should be drawn simultaneously, and cursor should either also be concurrent or should be a part of drawing the buffer
 - Correct go package structure
@@ -16,7 +13,10 @@ I think these two should be done in roughly this order:
 
 These are all needed but probably not in this order:
 
+- Visual Mode
+    - Currently this is supported, in that you can enter and move the cursor around. Text should be highlighted and able to be copied/pasted.
 - More Commands, currently only :q is supported.
+    - Probably should be a map of command strings to their "handler" function? i.e. writing the buffer to the provided filepath, etc. Almost like writing a list of endpoints for an http server
 - Reading in/writing to files
     - This may be an issue for down the line but how do you performantly handle very large files?
 - Rope data structure, this is partially implemented in `github.com/BoweFlex/data-structures`
