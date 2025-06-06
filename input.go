@@ -6,6 +6,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -94,6 +95,9 @@ func (p *inputProcessor) drawStatusLine() {
 		return
 	}
 
+	cursorLocationString := fmt.Sprintf("%d:%d", p.cursor.position.y, p.cursor.position.x)
+	statusLineStyle := tcell.StyleDefault.Background(tcell.ColorBlack.TrueColor()).Foreground(tcell.ColorWhite.TrueColor())
+
 	modeStyles := []tcell.Style{
 		tcell.StyleDefault.Foreground(tcell.ColorBlack.TrueColor()).Background(tcell.ColorBlue.TrueColor()),
 		tcell.StyleDefault.Foreground(tcell.ColorBlack.TrueColor()).Background(tcell.ColorGreen.TrueColor()),
@@ -108,8 +112,13 @@ func (p *inputProcessor) drawStatusLine() {
 	for i, char := range modeString {
 		p.screen.SetContent(i, p.screenHeight-1, char, nil, modeStyle)
 	}
-	for i := len(modeString); i < p.screenWidth; i++ {
-		p.screen.SetContent(i, p.screenHeight-1, ' ', nil, tcell.StyleDefault.Background(tcell.ColorBlack.TrueColor()))
+	for i := len(modeString); i < p.screenWidth-len(cursorLocationString); i++ {
+		p.screen.SetContent(i, p.screenHeight-1, ' ', nil, statusLineStyle)
+	}
+	startCursorLocationColumn := p.screenWidth - len(cursorLocationString)
+	for i := startCursorLocationColumn; i < p.screenWidth; i++ {
+		char := rune(cursorLocationString[i-startCursorLocationColumn])
+		p.screen.SetContent(i, p.screenHeight-1, char, nil, statusLineStyle)
 	}
 }
 
