@@ -160,8 +160,22 @@ func (p *inputProcessor) showBuffer() {
 }
 
 func (p *inputProcessor) updateScreen() {
-	p.showBuffer()
-	p.drawStatusLine()
+	// var wg sync.WaitGroup
+	drawFuncs := []func(){
+		p.showBuffer,
+		p.drawStatusLine,
+	}
+
+	// wg.Add(len(drawFuncs))
+	for _, drawFunc := range drawFuncs {
+		drawFunc()
+		// go func(draw func()) {
+		// 	defer wg.Done()
+		// 	draw()
+		// }(drawFunc)
+	}
+
+	// wg.Wait()
 	p.screen.Show()
 }
 
